@@ -26,17 +26,18 @@ def load_book_data(json_path: str) -> list[dict]:
 
 def preprocess_data(raw_data: list[dict], book_name: str) -> list[dict]:
     """
-    预处理数据：合并同一页的内容，过滤空内容
+    预处理数据：按逻辑页码合并内容，过滤逻辑页码为空的条目
 
-    返回格式: [{"page": "页码", "content": "合并后的内容", "book": "书名"}, ...]
+    返回格式: [{"page": "逻辑页码", "content": "合并后的内容", "book": "书名"}, ...]
     """
-    # 按页码分组
+    # 按逻辑页码分组
     pages: dict[str, list[str]] = {}
 
     for item in raw_data:
-        page = item.get("文件页码", "")
+        page = item.get("逻辑页码", "").strip()
         content = item.get("内容", "").strip()
 
+        # 丢弃逻辑页码为空或内容为空的条目
         if not page or not content:
             continue
 
@@ -44,7 +45,7 @@ def preprocess_data(raw_data: list[dict], book_name: str) -> list[dict]:
             pages[page] = []
         pages[page].append(content)
 
-    # 合并同一页的内容
+    # 合并同一逻辑页的内容
     processed = []
     for page, contents in pages.items():
         merged_content = "\n".join(contents)

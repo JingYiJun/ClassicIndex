@@ -1,7 +1,7 @@
 # 📚 Classic Index - 经典著作语义搜索
 
 [![Docker Build](https://github.com/jingyijun/ClassicIndex/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/jingyijun/ClassicIndex/actions/workflows/docker-publish.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 基于 Qwen Embedding 和 Milvus (Zilliz Cloud) 构建的语义搜索应用，帮助你在经典著作中快速找到最匹配的段落和页码。
 
@@ -301,4 +301,4 @@ A: 查看日志 `docker compose logs -f`，确认环境变量是否正确配置�
 
 ## 📝 License
 
-[MIT License](LICENSE)
+[Apache License 2.0](LICENSE)
