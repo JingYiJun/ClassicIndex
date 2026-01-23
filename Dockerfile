@@ -8,9 +8,7 @@ FROM python:3.12-slim AS base
 # 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PYTHONPATH=/app
 
 # 设置工作目录
 WORKDIR /app
@@ -26,12 +24,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================
 FROM base AS builder
 
+# 安装 uv - 超快的 Python 包管理器
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # 复制依赖文件
 COPY pyproject.toml ./
 
-# 安装 Python 依赖
-RUN pip install --upgrade pip && \
-    pip install .
+# 使用 uv 安装 Python 依赖（比 pip 快 10-100 倍）
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --compile-bytecode .
 
 # ============================================
 # 最终镜像
