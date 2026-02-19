@@ -152,6 +152,8 @@ Thumbs.db
 # Project specific
 *.json
 !env.example
+!frontend/**/*.json
+!frontend/*.json
 
 # Streamlit
 .streamlit/secrets.toml
