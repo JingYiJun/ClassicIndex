@@ -1,0 +1,44 @@
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: classicindex-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - classic-index-network
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: classicindex-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - ZILLIZ_CLOUD_URI=${ZILLIZ_CLOUD_URI}
+      - ZILLIZ_CLOUD_TOKEN=${ZILLIZ_CLOUD_TOKEN}
+      - MILVUS_COLLECTION_NAME=${MILVUS_COLLECTION_NAME:-classic_books}
+    volumes:
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - classic-index-network
+
+networks:
+  classic-index-network:
+    driver: bridge

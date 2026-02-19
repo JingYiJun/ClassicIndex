@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Images
 
 on:
     push:
@@ -14,12 +14,11 @@ on:
 
 env:
     REGISTRY: ghcr.io
-    # Docker 镜像名称必须全部小写
-    IMAGE_NAME: jingyijun/classicindex
+    IMAGE_PREFIX: jingyijun/classicindex
 
 jobs:
     # ============================================
-    # 并行构建各平台镜像
+    # 并行构建各镜像 × 各平台
     # ============================================
     build:
         runs-on: ubuntu-latest
@@ -29,6 +28,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
+                image:
+                    - name: frontend
+                      dockerfile: docker/Dockerfile.frontend
+                    - name: backend
+                      dockerfile: docker/Dockerfile.backend
                 platform:
                     - linux/amd64
                     - linux/arm64
@@ -61,19 +65,19 @@ jobs:
               id: meta
               uses: docker/metadata-action@v5
               with:
-                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image.name }}
 
             - name: Build and push by digest
               id: build
               uses: docker/build-push-action@v5
               with:
                   context: .
-                  file: ./Dockerfile
+                  file: ./${{ matrix.image.dockerfile }}
                   platforms: ${{ matrix.platform }}
                   labels: ${{ steps.meta.outputs.labels }}
-                  outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-                  cache-from: type=gha,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }}
-                  cache-to: type=gha,mode=max,scope=build-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+                  outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+                  cache-from: type=gha,scope=build-${{ matrix.image.name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+                  cache-to: type=gha,mode=max,scope=build-${{ matrix.image.name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
 
             - name: Export digest
               if: github.event_name != 'pull_request'
@@ -86,13 +90,13 @@ jobs:
               if: github.event_name != 'pull_request'
               uses: actions/upload-artifact@v4
               with:
-                  name: digests-${{ steps.prepare.outputs.PLATFORM_PAIR }}
+                  name: digests-${{ matrix.image.name }}-${{ steps.prepare.outputs.PLATFORM_PAIR }}
                   path: /tmp/digests/*
                   if-no-files-found: error
                   retention-days: 1
 
     # ============================================
-    # 合并多平台镜像 manifest
+    # 合并多平台镜像 manifest（按镜像分别合并）
     # ============================================
     merge:
         runs-on: ubuntu-latest
@@ -103,13 +107,18 @@ jobs:
             packages: write
             id-token: write
             attestations: write
+        strategy:
+            matrix:
+                image:
+                    - frontend
+                    - backend
 
         steps:
             - name: Download digests
               uses: actions/download-artifact@v4
               with:
                   path: /tmp/digests
-                  pattern: digests-*
+                  pattern: digests-${{ matrix.image }}-*
                   merge-multiple: true
 
             - name: Set up Docker Buildx
@@ -126,15 +135,12 @@ jobs:
               id: meta
               uses: docker/metadata-action@v5
               with:
-                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
                   tags: |
-                      # 设置 latest 标签（仅在 main/master 分支）
                       type=raw,value=latest,enable={{is_default_branch}}
-                      # 设置版本标签
                       type=semver,pattern={{version}}
                       type=semver,pattern={{major}}.{{minor}}
                       type=semver,pattern={{major}}
-                      # 设置 SHA 标签
                       type=sha,prefix=sha-
 
             - name: Create manifest list and push
@@ -142,21 +148,21 @@ jobs:
               working-directory: /tmp/digests
               run: |
                   docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-                      $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+                      $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}@sha256:%s ' *)
 
             - name: Inspect image
               run: |
-                  docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+                  docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ steps.meta.outputs.version }}
 
             - name: Get image digest
               id: digest
               run: |
-                  DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} --format '{{json .Manifest.Digest}}' | tr -d '"')
+                  DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ steps.meta.outputs.version }} --format '{{json .Manifest.Digest}}' | tr -d '"')
                   echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
             - name: Generate artifact attestation
               uses: actions/attest-build-provenance@v1
               with:
-                  subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                  subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
                   subject-digest: ${{ steps.digest.outputs.digest }}
                   push-to-registry: true

@@ -1,0 +1,39 @@
+# ============================================
+# ClassicIndex Backend
+# FastAPI + uvicorn
+# ============================================
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# ---------- 构建阶段：安装依赖 ----------
+FROM base AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+COPY pyproject.toml ./
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --compile-bytecode .
+
+# ---------- 运行阶段 ----------
+FROM base AS final
+
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+COPY config.py ./
+COPY backend/ ./backend/
+COPY scripts/ ./scripts/
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
